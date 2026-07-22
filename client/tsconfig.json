@@ -5,6 +5,8 @@
     "module": "ESNext",
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
+    /* import.meta.env for VITE_HOST_URL */
+    "types": ["vite/client"],
 
     /* Bundler mode */
     "moduleResolution": "bundler",
