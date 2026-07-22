@@ -1,0 +1,66 @@
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #10100f;
+  font:
+    13px ui-sans-serif,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color: #e8e6e3;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #2a2a28;
+  user-select: none;
+}
+
+.brand {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #cfcbc4;
+}
+
+/* Connection state is a first-class element, never inferred from a stalled
+   pane. Four states, always visible. */
+.status {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  border: 1px solid currentColor;
+}
+
+.status.connected {
+  color: #7dcfa0;
+}
+.status.reconnecting {
+  color: #e6c07b;
+}
+.status.disconnected {
+  color: #e88b8b;
+}
+.status.auth-expired {
+  color: #e88b8b;
+}
+
+#terminal {
+  flex: 1;
+  min-height: 0;
+  padding: 8px;
+}
