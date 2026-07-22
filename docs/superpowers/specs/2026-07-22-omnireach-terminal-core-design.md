@@ -41,6 +41,27 @@ breaking change.
 | Filesystem scope | Whole filesystem | Terminals already grant equivalent reach; a roots allowlist would be theater over an open shell |
 | Default shell | PowerShell, configurable per terminal | Matches Windows dev norms without locking out WSL/Git Bash |
 
+### Considered and declined: the ARC relay (2026-07-22)
+
+`/Volumes/Main External/Development/ARC` is a deployed Rust relay (`arc.ailuxis.com`)
+whose `beacon-proto` crate defines almost exactly this protocol — `AttachSession
+{ since_block }`, `BlockOutputChunk { seq, bytes }`, `SessionInput`, `SessionResize` —
+plus a relay-side `ScrollbackRing` with `replay_since()` and an explicit
+discontinuity marker, watcher fanout with slow-consumer eviction, and JWT auth.
+
+Its real attraction was not the code but that **a relay inverts the connection
+model**: the host would dial outbound instead of being a server, removing
+`cloudflared`, Cloudflare Access setup, and every NAT and firewall concern from
+the install.
+
+It was evaluated in depth and **declined**. Recorded here so the analysis is not
+repeated: adopting it would have made OmniReach a downstream consumer of ARC's
+protocol and release cadence, and would have discarded the working Cloudflare
+Access path and the Tauri client. Should this be revisited, the two findings
+that matter are (1) ARC's scrollback is chunk-sequenced and byte-transparent, so
+byte-exact replay does survive the move, and (2) the host would still want its
+own ring — ARC's covers relay↔client drops, not host↔relay drops.
+
 ### Accepted risks
 
 These were chosen with the trade-off stated, and are recorded so they are not re-litigated:
@@ -226,6 +247,12 @@ Sessions are in-memory and **do not survive a host restart**. After a host reboo
 shows previously-known sessions as dead and offers to respawn them with the same shell and
 working directory. Persisting PTY state across reboots is not possible without process
 migration and is explicitly not attempted.
+
+A session that *finishes* is a different matter and is **retained for one hour after its
+child exits** (`DEFAULT_DEAD_RETENTION`). Evicting on exit would defeat the product's central
+case — start a long agent run, close the laptop, read what happened an hour later — by
+discarding exactly the output the user reconnected for. Death time is stamped on first
+observation, so retention measures from when the child finished.
 
 ---
 
