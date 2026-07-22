@@ -1,0 +1,46 @@
+[package]
+name = "omnireach-host"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+name = "omnireach_host"
+path = "src/lib.rs"
+
+[[bin]]
+name = "omnireach-host"
+path = "src/main.rs"
+
+[features]
+default = ["access-auth"]
+# Cloudflare Access validation. Gated because its TLS stack (rustls -> aws-lc-rs
+# or ring) builds C that requires windows.h, which makes
+# `cargo check --target x86_64-pc-windows-msvc` impossible from macOS.
+# Nothing in this module is platform-specific, so excluding it from the
+# cross-check loses no Windows coverage — see scripts/check.sh.
+access-auth = ["dep:jsonwebtoken", "dep:reqwest"]
+
+[dependencies]
+omnireach-protocol = { path = "../protocol" }
+axum = { version = "0.8.9", features = ["ws"] }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid.workspace = true
+portable-pty = "0.9.0"
+# A crypto backend is MANDATORY: with neither `rust_crypto` nor `aws_lc_rs`,
+# `decode` compiles fine and panics at runtime. `rust_crypto` is pure Rust.
+jsonwebtoken = { version = "10.4", default-features = false, features = ["rust_crypto"], optional = true }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
+futures-util = "0.3"
+toml = "0.8"
+dirs = "5"
+parking_lot = "0.12"
+
+[dev-dependencies]
+tokio-tungstenite = "0.30"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+base64 = "0.22"
