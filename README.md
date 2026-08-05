@@ -78,7 +78,14 @@ Built and verified:
   reconnect can still read what happened
 - Multiplexed WebSocket transport with real backpressure
 - Cloudflare Access JWT validation (JWKS cached, refreshed on unknown `kid`)
-- A Tauri + xterm.js client that resumes by `(session_id, last_seq)`
+- `pty.exit` carries the child's real wait status, not a placeholder
+- A Tauri + xterm.js client with dynamic terminals: 4 spawn on first launch,
+  tabs to switch, [+]/[×] to open and close. Sessions resume across app
+  restarts by replaying the host's ring from 0, so scrollback is repainted
+  rather than the pane coming back blank; live reconnects resume at
+  `last_seq` so nothing duplicates. Each pane owns its `TextDecoder` —
+  a shared stateful decoder would corrupt multi-byte sequences when
+  interleaved frames from different panes split them.
 
 ### Not verified — read before trusting any of it
 
@@ -92,13 +99,12 @@ Built and verified:
   configures `cloudflared`, creates the named tunnel, or implements the
   client's SSO login. That flow's endpoint shape must be checked against live
   Cloudflare docs rather than trusted from the spec.
-- **The client's Enter-key path is untested.** Connection, output rendering,
-  and input round-trip were verified in a headless browser, and the host is
-  confirmed to execute on a bare CR — but no keydown event reaches xterm in
-  that environment, so the `Enter → onData → sendInput` link is unexercised.
-- **`PtyExit.status` is always `0`.** It means "the shell is gone", not "the
-  shell succeeded". Making it truthful needs a `PtySession` API change.
-- The client drives one terminal. The host supports many.
+- **The client's Enter-key path is untested.** Multi-terminal routing, resume,
+  close/switch, and exit reporting were all verified headlessly through the
+  app's real send path (`conn.sendInput`), and the host is confirmed to
+  execute on a bare CR — but no keydown event reaches xterm in a headless
+  browser, so the one remaining unexercised link is xterm's own
+  `Enter → onData('\r')` mapping.
 
 ### Not built
 

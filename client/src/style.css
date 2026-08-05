@@ -23,8 +23,8 @@ body {
 .bar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 6px 12px;
   border-bottom: 1px solid #2a2a28;
   user-select: none;
 }
@@ -33,6 +33,60 @@ body {
   font-weight: 600;
   letter-spacing: 0.02em;
   color: #cfcbc4;
+  margin-right: 4px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab {
+  appearance: none;
+  border: 1px solid #2a2a28;
+  background: transparent;
+  color: #a8a49d;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: #e8e6e3;
+}
+
+.tab.active {
+  background: #23231f;
+  color: #e8e6e3;
+  border-color: #3a3a36;
+}
+
+.tab.dead {
+  color: #6e6a64;
+  text-decoration: line-through;
+}
+
+.ctl {
+  appearance: none;
+  border: 1px solid #2a2a28;
+  background: transparent;
+  color: #a8a49d;
+  font: inherit;
+  width: 24px;
+  height: 24px;
+  line-height: 1;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ctl:hover {
+  color: #e8e6e3;
+  border-color: #3a3a36;
 }
 
 /* Connection state is a first-class element, never inferred from a stalled
@@ -59,8 +113,22 @@ body {
   color: #e88b8b;
 }
 
-#terminal {
+#terminals {
   flex: 1;
   min-height: 0;
+  position: relative;
+}
+
+/* Panes stack absolutely and toggle visibility, NOT display:none — xterm
+   needs a laid-out element for fit() to measure, and a display:none pane
+   would open with zero dimensions. */
+.pane {
+  position: absolute;
+  inset: 0;
   padding: 8px;
+  visibility: hidden;
+}
+
+.pane.active {
+  visibility: visible;
 }

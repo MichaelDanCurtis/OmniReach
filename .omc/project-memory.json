@@ -1,0 +1,147 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1785923767992,
+  "projectRoot": "/Volumes/Main External/Development/OmniReach",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Rust",
+        "version": "1.96",
+        "confidence": "high",
+        "markers": [
+          "Cargo.toml"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "cargo",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "cargo build",
+    "testCommand": "cd \"/Volumes/Main External/Development/OmniReach\" && cargo test --all 2>&1 | grep -E \"^test result|^error|panicked\" | head -10 && cargo clippy --all-targets -- -D warnings 2>&1 | grep -E \"^error|^warning\" | head -5; cargo check -p omnireach-host --no-default-features --target x86_64-pc-windows-msvc 2>&1 | tail -1",
+    "lintCommand": "cargo clippy",
+    "devCommand": "cargo run",
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "scripts"
+    ],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "client": {
+      "path": "client",
+      "purpose": null,
+      "fileCount": 7,
+      "lastAccessed": 1785923767979,
+      "keyFiles": [
+        "README.md",
+        "index.html",
+        "package-lock.json",
+        "package.json",
+        "tsconfig.json"
+      ]
+    },
+    "crates": {
+      "path": "crates",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1785923767979,
+      "keyFiles": []
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 0,
+      "lastAccessed": 1785923767979,
+      "keyFiles": []
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 1,
+      "lastAccessed": 1785923767980,
+      "keyFiles": [
+        "check.sh"
+      ]
+    },
+    "target": {
+      "path": "target",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1785923767980,
+      "keyFiles": [
+        "CACHEDIR.TAG"
+      ]
+    },
+    "client/node_modules": {
+      "path": "client/node_modules",
+      "purpose": "Dependencies",
+      "fileCount": 1,
+      "lastAccessed": 1785923767981,
+      "keyFiles": []
+    },
+    "client/src": {
+      "path": "client/src",
+      "purpose": "Source code",
+      "fileCount": 4,
+      "lastAccessed": 1785923767981,
+      "keyFiles": [
+        "connection.ts",
+        "frame.ts",
+        "main.ts"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "crates/host/src/pty.rs",
+      "accessCount": 6,
+      "lastAccessed": 1785943996174,
+      "type": "file"
+    },
+    {
+      "path": "crates/host/src/transport.rs",
+      "accessCount": 3,
+      "lastAccessed": 1785944018853,
+      "type": "file"
+    },
+    {
+      "path": "crates/host/tests/transport.rs",
+      "accessCount": 2,
+      "lastAccessed": 1785944057350,
+      "type": "file"
+    },
+    {
+      "path": "client/index.html",
+      "accessCount": 1,
+      "lastAccessed": 1785944103413,
+      "type": "file"
+    },
+    {
+      "path": "client/src/style.css",
+      "accessCount": 1,
+      "lastAccessed": 1785944112864,
+      "type": "file"
+    },
+    {
+      "path": "client/src/main.ts",
+      "accessCount": 1,
+      "lastAccessed": 1785944156963,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

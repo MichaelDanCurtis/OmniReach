@@ -1,0 +1,7 @@
+{
+  "tool_name": "mcp__Claude_Browser__navigate",
+  "tool_input_preview": "{\"url\":\"http://localhost:1420/\"}",
+  "error": "No preview is open. Use preview_start with {\"url\": \"https://…\"} to open a browser tab at a URL, or with {\"name\": \"…\"} to start a dev server from .claude/launch.json.",
+  "timestamp": "2026-08-05T15:36:52.274Z",
+  "retry_count": 1
+}
