@@ -93,6 +93,11 @@ const DEAD_TICKS_BEFORE_EXIT: u32 = 3;
 pub struct AppState {
     pub registry: Arc<SessionRegistry>,
     pub config: Arc<Config>,
+    pub fs: Arc<crate::fs::FsService>,
+    /// The remote browser, launched lazily: Chrome is expensive and most
+    /// sessions never open it. `None` until the first `browser.launch`.
+    #[cfg(feature = "remote-browser")]
+    pub browser: Arc<tokio::sync::Mutex<Option<Arc<crate::browser::BrowserService>>>>,
     /// Cloudflare Access validator, or `None` for an unauthenticated host.
     ///
     /// Gated on the same feature as [`crate::auth`]: that module does not exist
@@ -110,6 +115,9 @@ impl AppState {
         Self {
             registry,
             config,
+            fs: Arc::new(crate::fs::FsService::new()),
+            #[cfg(feature = "remote-browser")]
+            browser: Arc::new(tokio::sync::Mutex::new(None)),
             #[cfg(feature = "access-auth")]
             auth: None,
         }
@@ -215,6 +223,15 @@ struct PtyData {
 enum Outbound {
     Text(String),
     Pty(PtyData),
+    /// Bulk bytes that MUST arrive: file transfer chunks. Unlike PTY output
+    /// these are pulled one chunk at a time by the client, so the client's own
+    /// request pacing is the backpressure and no queue accounting is needed.
+    Bulk(Vec<u8>),
+    /// Bytes that may be dropped under load: screencast frames. A dropped
+    /// frame is superseded by the next one, so discarding beats queueing —
+    /// the opposite of PTY output, where a gap is data loss.
+    #[cfg(feature = "remote-browser")]
+    Droppable(Vec<u8>),
 }
 
 /// The peer is gone; unwind the task that noticed.
@@ -249,6 +266,9 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                     data.queue.release(data.payload_len);
                     r
                 }
+                Outbound::Bulk(b) => sink.send(Message::Binary(b.into())).await,
+                #[cfg(feature = "remote-browser")]
+                Outbound::Droppable(b) => sink.send(Message::Binary(b.into())).await,
             };
             if result.is_err() {
                 break;
@@ -258,6 +278,10 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
     let mut attachments: HashMap<u32, Attachment> = HashMap::new();
     let mut next_handle: u32 = 1;
+    // Upload chunks arrive as a binary frame immediately BEFORE the `fs.write`
+    // that consumes them, keyed by the client's own request id. WebSocket
+    // ordering makes that deterministic.
+    let mut pending_uploads: HashMap<u32, Vec<u8>> = HashMap::new();
 
     while let Some(Ok(msg)) = stream.next().await {
         match msg {
@@ -271,7 +295,15 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                         continue;
                     }
                 };
-                let resp = handle_control(&state, &req, &mut attachments, &mut next_handle, &tx);
+                let resp = handle_control(
+                    &state,
+                    &req,
+                    &mut attachments,
+                    &mut next_handle,
+                    &tx,
+                    &mut pending_uploads,
+                )
+                .await;
                 let json =
                     serde_json::to_string(&resp).expect("ControlResponse is always serializable");
                 if tx.send(Outbound::Text(json)).await.is_err() {
@@ -283,13 +315,21 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                     tracing::debug!("ignoring undecodable binary frame");
                     continue;
                 };
-                if frame.kind != FrameKind::PtyInput {
-                    continue;
-                }
-                if let Some(a) = attachments.get(&frame.handle) {
-                    if let Err(e) = a.session.write_input(&frame.payload) {
-                        tracing::debug!("pty write failed: {e}");
+                match frame.kind {
+                    FrameKind::PtyInput => {
+                        if let Some(a) = attachments.get(&frame.handle) {
+                            if let Err(e) = a.session.write_input(&frame.payload) {
+                                tracing::debug!("pty write failed: {e}");
+                            }
+                        }
                     }
+                    FrameKind::FsChunk => {
+                        // Park the bytes; the matching `fs.write` claims them.
+                        // Bounded by the client's own one-chunk-at-a-time
+                        // pacing, so this cannot grow without bound.
+                        pending_uploads.insert(frame.handle, frame.payload);
+                    }
+                    _ => {}
                 }
             }
             Message::Close(_) => break,
@@ -303,13 +343,473 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     writer.abort();
 }
 
-fn handle_control(
+/// Filesystem ops. Returns `None` for any op that is not `fs.*`, so the caller
+/// can fall through to the other families.
+async fn handle_fs(
+    state: &AppState,
+    req: &ControlRequest,
+    tx: &mpsc::Sender<Outbound>,
+    pending_uploads: &mut HashMap<u32, Vec<u8>>,
+) -> Option<ControlResponse> {
+    let fs = &state.fs;
+    let id = req.id;
+
+    /// Unpack a required string param, or answer BAD_PARAMS.
+    macro_rules! str_param {
+        ($name:literal) => {
+            match req.params.get($name).and_then(|v| v.as_str()) {
+                Some(s) => s.to_string(),
+                None => {
+                    return Some(ControlResponse::err(
+                        id,
+                        "BAD_PARAMS",
+                        concat!("`", $name, "` is required"),
+                    ))
+                }
+            }
+        };
+    }
+
+    /// Map an `FsError` to the wire, preserving its own code.
+    fn wire<T>(
+        id: u64,
+        r: Result<T, crate::fs::FsError>,
+        ok: serde_json::Value,
+    ) -> ControlResponse {
+        match r {
+            Ok(_) => ControlResponse::ok(id, ok),
+            Err(e) => ControlResponse::err(id, e.code(), e.to_string()),
+        }
+    }
+
+    match req.op.as_str() {
+        "fs.roots" => Some(ControlResponse::ok(
+            id,
+            serde_json::json!({ "roots": fs.roots(), "home": fs.home() }),
+        )),
+
+        "fs.list" => {
+            let path = str_param!("path");
+            match fs.list(&path) {
+                // Echo the canonicalized path back: the client displays it, and
+                // showing the raw input would hide that `..` was resolved.
+                Ok(entries) => {
+                    let canonical = fs
+                        .stat(&path)
+                        .map(|e| e.path)
+                        .unwrap_or_else(|_| path.clone());
+                    Some(ControlResponse::ok(
+                        id,
+                        serde_json::json!({ "path": canonical, "entries": entries }),
+                    ))
+                }
+                Err(e) => Some(ControlResponse::err(id, e.code(), e.to_string())),
+            }
+        }
+
+        "fs.stat" => {
+            let path = str_param!("path");
+            match fs.stat(&path) {
+                Ok(e) => Some(ControlResponse::ok(id, serde_json::json!({ "entry": e }))),
+                Err(e) => Some(ControlResponse::err(id, e.code(), e.to_string())),
+            }
+        }
+
+        "fs.read" => {
+            let path = str_param!("path");
+            let offset = req
+                .params
+                .get("offset")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let len = req
+                .params
+                .get("len")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(64 * 1024) as usize;
+
+            match fs.read_chunk(&path, offset, len) {
+                Ok((bytes, total)) => {
+                    let n = bytes.len();
+                    // The binary frame is keyed by the client's own request id,
+                    // so its collector is registered before this can arrive.
+                    let frame = BinaryFrame {
+                        kind: FrameKind::FsChunk,
+                        handle: id as u32,
+                        seq: offset,
+                        payload: bytes,
+                    };
+                    if n > 0 {
+                        let _ = tx.send(Outbound::Bulk(frame.encode())).await;
+                    }
+                    Some(ControlResponse::ok(
+                        id,
+                        serde_json::json!({
+                            "len": n,
+                            "total": total,
+                            "eof": offset + n as u64 >= total,
+                        }),
+                    ))
+                }
+                Err(e) => Some(ControlResponse::err(id, e.code(), e.to_string())),
+            }
+        }
+
+        "fs.write" => {
+            let path = str_param!("path");
+            let offset = req
+                .params
+                .get("offset")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let bytes = pending_uploads.remove(&(id as u32)).unwrap_or_default();
+            let written = bytes.len();
+            Some(wire(
+                id,
+                fs.write_chunk(&path, offset, &bytes),
+                serde_json::json!({ "written": written }),
+            ))
+        }
+
+        "fs.mkdir" => {
+            let path = str_param!("path");
+            Some(wire(id, fs.mkdir(&path), serde_json::json!({})))
+        }
+
+        "fs.remove" => {
+            let path = str_param!("path");
+            Some(wire(id, fs.remove(&path), serde_json::json!({})))
+        }
+
+        "fs.rename" => {
+            let from = str_param!("from");
+            let to = str_param!("to");
+            Some(wire(id, fs.rename(&from, &to), serde_json::json!({})))
+        }
+
+        _ => None,
+    }
+}
+
+/// Remote-browser ops. Returns `None` for anything not `browser.*`.
+#[cfg(feature = "remote-browser")]
+async fn handle_browser(
+    state: &AppState,
+    req: &ControlRequest,
+    tx: &mpsc::Sender<Outbound>,
+) -> Option<ControlResponse> {
+    use crate::browser::BrowserService;
+
+    let id = req.id;
+    if !req.op.starts_with("browser.") {
+        return None;
+    }
+
+    macro_rules! tab_id {
+        () => {
+            match req.params.get("tab_id").and_then(|v| v.as_str()) {
+                Some(s) => s.to_string(),
+                None => {
+                    return Some(ControlResponse::err(
+                        id,
+                        "BAD_PARAMS",
+                        "`tab_id` is required",
+                    ))
+                }
+            }
+        };
+    }
+
+    /// The service, launching Chrome on first use.
+    async fn service(
+        state: &AppState,
+    ) -> Result<Arc<BrowserService>, crate::browser::BrowserError> {
+        let mut guard = state.browser.lock().await;
+        if let Some(svc) = guard.as_ref() {
+            return Ok(Arc::clone(svc));
+        }
+        let downloads = state.config.downloads_dir();
+        let svc = BrowserService::launch(state.config.chrome_path.clone(), downloads).await?;
+        *guard = Some(Arc::clone(&svc));
+        Ok(svc)
+    }
+
+    let svc = match service(state).await {
+        Ok(s) => s,
+        Err(e) => return Some(ControlResponse::err(id, e.code(), e.to_string())),
+    };
+
+    fn wire<T>(
+        id: u64,
+        r: Result<T, crate::browser::BrowserError>,
+        ok: serde_json::Value,
+    ) -> ControlResponse {
+        match r {
+            Ok(_) => ControlResponse::ok(id, ok),
+            Err(e) => ControlResponse::err(id, e.code(), e.to_string()),
+        }
+    }
+
+    match req.op.as_str() {
+        "browser.launch" => {
+            // Reaching here already launched it, and started the forwarders.
+            start_browser_forwarders(&svc, tx);
+            Some(ControlResponse::ok(id, serde_json::json!({ "ok": true })))
+        }
+
+        "browser.new_tab" => {
+            let url = req
+                .params
+                .get("url")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            match svc.new_tab(url).await {
+                Ok(tab) => Some(ControlResponse::ok(
+                    id,
+                    serde_json::json!({ "tab": tab_json(&tab) }),
+                )),
+                Err(e) => Some(ControlResponse::err(id, e.code(), e.to_string())),
+            }
+        }
+
+        "browser.list_tabs" => match svc.list_tabs().await {
+            Ok(tabs) => {
+                let v: Vec<_> = tabs.iter().map(tab_json).collect();
+                Some(ControlResponse::ok(id, serde_json::json!({ "tabs": v })))
+            }
+            Err(e) => Some(ControlResponse::err(id, e.code(), e.to_string())),
+        },
+
+        "browser.close_tab" => {
+            let t = tab_id!();
+            Some(wire(id, svc.close_tab(&t).await, serde_json::json!({})))
+        }
+
+        "browser.activate_tab" => {
+            let t = tab_id!();
+            Some(wire(id, svc.activate_tab(&t).await, serde_json::json!({})))
+        }
+
+        "browser.navigate" => {
+            let t = tab_id!();
+            let url = match req.params.get("url").and_then(|v| v.as_str()) {
+                Some(u) => u.to_string(),
+                None => return Some(ControlResponse::err(id, "BAD_PARAMS", "`url` is required")),
+            };
+            Some(wire(
+                id,
+                svc.navigate(&t, &url).await,
+                serde_json::json!({}),
+            ))
+        }
+
+        "browser.screencast_start" => {
+            let t = tab_id!();
+            let quality = req
+                .params
+                .get("quality")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(60) as u32;
+            let max_width = req
+                .params
+                .get("max_width")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(1600) as u32;
+            Some(wire(
+                id,
+                svc.start_screencast(&t, quality, max_width).await,
+                serde_json::json!({}),
+            ))
+        }
+
+        "browser.screencast_stop" => {
+            let t = tab_id!();
+            Some(wire(
+                id,
+                svc.stop_screencast(&t).await,
+                serde_json::json!({}),
+            ))
+        }
+
+        "browser.mouse" => {
+            let t = tab_id!();
+            let kind = req
+                .params
+                .get("kind")
+                .and_then(|v| v.as_str())
+                .unwrap_or("mouseMoved");
+            let x = req.params.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let y = req.params.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let button = req
+                .params
+                .get("button")
+                .and_then(|v| v.as_str())
+                .unwrap_or("left");
+            let clicks = req
+                .params
+                .get("click_count")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(1);
+            Some(wire(
+                id,
+                svc.send_mouse(&t, kind, x, y, button, clicks).await,
+                serde_json::json!({}),
+            ))
+        }
+
+        "browser.key" => {
+            let t = tab_id!();
+            let kind = req
+                .params
+                .get("kind")
+                .and_then(|v| v.as_str())
+                .unwrap_or("keyDown");
+            let key = req.params.get("key").and_then(|v| v.as_str()).unwrap_or("");
+            let text = req
+                .params
+                .get("text")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            Some(wire(
+                id,
+                svc.send_key(&t, kind, key, text).await,
+                serde_json::json!({}),
+            ))
+        }
+
+        "browser.evaluate" => {
+            let t = tab_id!();
+            let expr = req
+                .params
+                .get("expression")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            match svc.evaluate(&t, expr).await {
+                Ok(result) => Some(ControlResponse::ok(
+                    id,
+                    serde_json::json!({ "result": result }),
+                )),
+                Err(e) => Some(ControlResponse::err(id, e.code(), e.to_string())),
+            }
+        }
+
+        other => Some(ControlResponse::err(
+            id,
+            "UNKNOWN_OP",
+            format!("unknown op '{other}'"),
+        )),
+    }
+}
+
+#[cfg(feature = "remote-browser")]
+fn tab_json(t: &crate::browser::TabInfo) -> serde_json::Value {
+    serde_json::json!({
+        "tab_id": t.tab_id,
+        // A stable u32 the binary frame header can carry — CDP target ids are
+        // strings, and the frame's `handle` field is numeric.
+        "handle": tab_handle(&t.tab_id),
+        "url": t.url,
+        "title": t.title,
+        "active": t.active,
+    })
+}
+
+/// Map a CDP target id onto a `u32` frame handle, stably for the process.
+#[cfg(feature = "remote-browser")]
+fn tab_handle(tab_id: &str) -> u32 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut h = DefaultHasher::new();
+    tab_id.hash(&mut h);
+    // Fold to 32 bits and avoid 0, which reads as "no handle" elsewhere.
+    (h.finish() as u32) | 1
+}
+
+/// Forward screencast frames and console lines to this connection. Idempotent
+/// per connection: a second `browser.launch` must not double-subscribe.
+#[cfg(feature = "remote-browser")]
+fn start_browser_forwarders(
+    svc: &Arc<crate::browser::BrowserService>,
+    tx: &mpsc::Sender<Outbound>,
+) {
+    // Forwarders are per-connection. A repeated `browser.launch` spawns another
+    // pair, but each exits as soon as its channel closes, so the duplicate is
+    // bounded and harmless — and the client only launches once per session.
+    let mut frames = svc.subscribe_frames();
+    let ftx = tx.clone();
+    tokio::spawn(async move {
+        loop {
+            match frames.recv().await {
+                Ok(f) => {
+                    let frame = BinaryFrame {
+                        kind: FrameKind::BrowserFrame,
+                        handle: tab_handle(&f.tab_id),
+                        seq: f.seq,
+                        payload: f.jpeg,
+                    };
+                    // Metadata rides a control event so the client can map
+                    // clicks; it is small and must not be dropped.
+                    let meta = serde_json::json!({
+                        "event": "browser.frame_meta",
+                        "tab_id": f.tab_id,
+                        "width": f.width,
+                        "height": f.height,
+                        "device_width": f.device_width,
+                        "device_height": f.device_height,
+                        "offset_top": f.offset_top,
+                        "page_scale": f.page_scale,
+                    });
+                    if ftx.send(Outbound::Text(meta.to_string())).await.is_err() {
+                        return;
+                    }
+                    // Screencast frames are droppable: if the queue is full the
+                    // next frame supersedes this one anyway, so discarding beats
+                    // stalling the whole connection behind stale video.
+                    if ftx.try_send(Outbound::Droppable(frame.encode())).is_err() {
+                        tracing::trace!("dropped a screencast frame; client is behind");
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                    tracing::debug!("screencast forwarder lagged {n} frames");
+                }
+                Err(_) => return,
+            }
+        }
+    });
+
+    let mut console = svc.subscribe_console();
+    let ctx = tx.clone();
+    tokio::spawn(async move {
+        while let Ok(line) = console.recv().await {
+            let msg = serde_json::json!({
+                "event": "browser.console",
+                "tab_id": line.tab_id,
+                "level": line.level,
+                "text": line.text,
+            });
+            if ctx.send(Outbound::Text(msg.to_string())).await.is_err() {
+                return;
+            }
+        }
+    });
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn handle_control(
     state: &AppState,
     req: &ControlRequest,
     attachments: &mut HashMap<u32, Attachment>,
     next_handle: &mut u32,
     tx: &mpsc::Sender<Outbound>,
+    pending_uploads: &mut HashMap<u32, Vec<u8>>,
 ) -> ControlResponse {
+    if let Some(resp) = handle_fs(state, req, tx, pending_uploads).await {
+        return resp;
+    }
+    #[cfg(feature = "remote-browser")]
+    if let Some(resp) = handle_browser(state, req, tx).await {
+        return resp;
+    }
     match req.op.as_str() {
         "pty.list" => match serde_json::to_value(state.registry.list()) {
             Ok(v) => ControlResponse::ok(req.id, serde_json::json!({ "sessions": v })),

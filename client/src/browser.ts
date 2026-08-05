@@ -414,6 +414,14 @@ export class BrowserView {
       canvasSize: () => ({ w: this.canvas.width, h: this.canvas.height }),
       ensureLaunched: () => this.ensureLaunched(),
       go: (u: string) => this.go(u),
+      evaluate: async (expr: string) => {
+        if (!this.activeTab) return null;
+        const r = await this.conn.send("browser.evaluate", {
+          tab_id: this.activeTab,
+          expression: expr,
+        });
+        return r.result;
+      },
       clickAt: (cssX: number, cssY: number) => {
         const rect = this.canvas.getBoundingClientRect();
         const ev = new MouseEvent("mousedown", {

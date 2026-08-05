@@ -19,7 +19,7 @@
   },
   "build": {
     "buildCommand": "cd \"/Volumes/Main External/Development/OmniReach/client\" && npx tsc --noEmit 2>&1 | head -15; echo \"---\"; cd .. && wc -l crates/host/src/fs.rs crates/host/src/browser.rs 2>/dev/null",
-    "testCommand": "cd \"/Volumes/Main External/Development/OmniReach\" && cargo test -p omnireach-host --test fs 2>&1 | tail -30",
+    "testCommand": "cd \"/Volumes/Main External/Development/OmniReach\" && echo \"=== headless/omnireach chromes ===\"; pgrep -fl \"Google Chrome\" | grep -c \"headless\\|omnireach-chrome\" || echo \"0 (none)\"; echo \"=== profile dirs before ===\"; ls -ld ${TMPDIR}omnireach-chrome-* 2>/dev/null; echo \"=== run tests again ===\"; cargo test -p omnireach-host --test browser -- --test-threads=1 2>&1 | tail -5; echo \"=== headless chromes after ===\"; pgrep -fl \"Google Chrome\" | grep \"headless\\|omnireach-chrome\" | head -3; echo \"(grep exit $?)\"; echo \"=== profile dirs after ===\"; ls -ld ${TMPDIR}omnireach-chrome-* 2>/dev/null",
     "lintCommand": "cargo clippy",
     "devCommand": "cargo run",
     "scripts": {}
@@ -107,6 +107,12 @@
   },
   "hotPaths": [
     {
+      "path": "crates/host/src/transport.rs",
+      "accessCount": 22,
+      "lastAccessed": 1785945467311,
+      "type": "file"
+    },
+    {
       "path": "crates/host/src/pty.rs",
       "accessCount": 6,
       "lastAccessed": 1785943996174,
@@ -119,15 +125,21 @@
       "type": "file"
     },
     {
+      "path": "crates/host/src/fs.rs",
+      "accessCount": 6,
+      "lastAccessed": 1785945534452,
+      "type": "file"
+    },
+    {
       "path": "crates/host/Cargo.toml",
       "accessCount": 5,
       "lastAccessed": 1785944557156,
       "type": "file"
     },
     {
-      "path": "crates/host/src/transport.rs",
-      "accessCount": 3,
-      "lastAccessed": 1785944018853,
+      "path": "crates/host/tests/browser.rs",
+      "accessCount": 5,
+      "lastAccessed": 1785945733251,
       "type": "file"
     },
     {
@@ -140,6 +152,12 @@
       "path": "README.md",
       "accessCount": 3,
       "lastAccessed": 1785945094873,
+      "type": "file"
+    },
+    {
+      "path": "crates/host/tests/fs.rs",
+      "accessCount": 3,
+      "lastAccessed": 1785945545899,
       "type": "file"
     },
     {
@@ -164,6 +182,18 @@
       "path": "client/index.html",
       "accessCount": 2,
       "lastAccessed": 1785944948951,
+      "type": "file"
+    },
+    {
+      "path": "crates/host/src/browser.rs",
+      "accessCount": 2,
+      "lastAccessed": 1785945278180,
+      "type": "file"
+    },
+    {
+      "path": "crates/host/src/config.rs",
+      "accessCount": 2,
+      "lastAccessed": 1785945477185,
       "type": "file"
     },
     {
@@ -209,9 +239,9 @@
       "type": "file"
     },
     {
-      "path": "crates/host/tests/fs.rs",
+      "path": "crates/host/tests/transport_fs.rs",
       "accessCount": 1,
-      "lastAccessed": 1785944994809,
+      "lastAccessed": 1785945339144,
       "type": "file"
     }
   ],

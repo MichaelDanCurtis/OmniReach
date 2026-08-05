@@ -42,6 +42,15 @@ pub struct Config {
     pub scrollback_bytes: usize,
     #[serde(default)]
     pub access: Option<AccessConfig>,
+    /// Path to the Chrome/Chromium binary for the remote browser. `None` lets
+    /// chromiumoxide search the platform's usual locations.
+    #[serde(default)]
+    pub chrome_path: Option<String>,
+    /// Where the remote browser writes downloads. Defaults to
+    /// `<config dir>/downloads`, which the file browser can then reach — the
+    /// two features are only useful together.
+    #[serde(default)]
+    pub downloads_dir: Option<String>,
     #[serde(default)]
     pub shells: Vec<ShellConfig>,
 }
@@ -94,6 +103,16 @@ impl Config {
             .find(|s| s.default)
             .or_else(|| self.shells.first())
             .expect("from_str guarantees at least one shell")
+    }
+
+    /// Resolved download directory for the remote browser.
+    pub fn downloads_dir(&self) -> PathBuf {
+        if let Some(d) = &self.downloads_dir {
+            return PathBuf::from(d);
+        }
+        Self::config_path()
+            .and_then(|p| p.parent().map(|d| d.join("downloads")))
+            .unwrap_or_else(|| std::env::temp_dir().join("omnireach-downloads"))
     }
 
     pub fn shell_by_name(&self, name: &str) -> Option<&ShellConfig> {

@@ -95,10 +95,17 @@ fn canonical(p: &Path) -> String {
 /// Bytes that are emphatically **not** valid UTF-8: the run includes NUL, lone
 /// continuation bytes (0x80–0xBF with no lead byte) and 0xFE/0xFF, which never
 /// appear in UTF-8 at all. Any lossy decode on the transfer path mangles this.
+///
+/// It counts *down* from 0xFF rather than up from 0x00 so that even a very
+/// short payload is invalid UTF-8. Counting up would make `binary_payload(10)`
+/// plain ASCII, and the byte-transparency tests using it would quietly prove
+/// nothing.
 fn binary_payload(len: usize) -> Vec<u8> {
-    let bytes: Vec<u8> = (0..len).map(|i| (i % 256) as u8).collect();
+    let bytes: Vec<u8> = (0..len)
+        .map(|i| 0xFFu8.wrapping_sub((i % 256) as u8))
+        .collect();
     assert!(
-        String::from_utf8(bytes.clone()).is_err(),
+        len == 0 || String::from_utf8(bytes.clone()).is_err(),
         "the payload must be invalid UTF-8 or this test proves nothing"
     );
     bytes
@@ -235,6 +242,34 @@ fn reading_past_the_end_returns_empty_rather_than_erroring() {
     let (chunk, total) = svc.read_chunk(&target, 9_000, 512).unwrap();
     assert!(chunk.is_empty(), "reading past EOF must yield no bytes");
     assert_eq!(total, 10);
+}
+
+#[test]
+fn an_oversized_request_is_capped_and_still_reassembles() {
+    // `len` reaches the service straight off the wire. Without a cap, one
+    // request naming a large file would allocate the whole thing; with it, the
+    // download simply takes another turn round the loop.
+    let fx = Fixture::new("cap");
+    let svc = FsService::new();
+    let payload = binary_payload(omnireach_host::fs::MAX_CHUNK + 4_096);
+    fx.write("big.bin", &payload);
+    let target = fx.s("big.bin");
+
+    let (first, total) = svc.read_chunk(&target, 0, usize::MAX).unwrap();
+    assert_eq!(total, payload.len() as u64);
+    assert_eq!(
+        first.len(),
+        omnireach_host::fs::MAX_CHUNK,
+        "an unbounded request must be clamped to MAX_CHUNK"
+    );
+
+    // ...and the loop that any client already runs still completes the file.
+    let (rest, _) = svc
+        .read_chunk(&target, first.len() as u64, usize::MAX)
+        .unwrap();
+    let mut got = first;
+    got.extend_from_slice(&rest);
+    assert_eq!(got, payload, "capping must not lose or reorder bytes");
 }
 
 #[test]
@@ -380,7 +415,10 @@ fn reading_a_directory_is_a_directory() {
 #[test]
 fn a_relative_path_is_rejected_rather_than_resolved_against_the_process_cwd() {
     let svc = FsService::new();
-    assert!(matches!(svc.list("relative/path"), Err(FsError::InvalidPath(_))));
+    assert!(matches!(
+        svc.list("relative/path"),
+        Err(FsError::InvalidPath(_))
+    ));
     assert!(matches!(svc.stat(""), Err(FsError::InvalidPath(_))));
 }
 
