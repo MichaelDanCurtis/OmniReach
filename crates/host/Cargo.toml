@@ -12,13 +12,17 @@ name = "omnireach-host"
 path = "src/main.rs"
 
 [features]
-default = ["access-auth"]
+default = ["access-auth", "remote-browser"]
 # Cloudflare Access validation. Gated because its TLS stack (rustls -> aws-lc-rs
 # or ring) builds C that requires windows.h, which makes
 # `cargo check --target x86_64-pc-windows-msvc` impossible from macOS.
 # Nothing in this module is platform-specific, so excluding it from the
 # cross-check loses no Windows coverage — see scripts/check.sh.
 access-auth = ["dep:jsonwebtoken", "dep:reqwest"]
+# Remote headless-Chrome session. Gated for the same reason: chromiumoxide's
+# websocket transport pulls a TLS stack that builds C. Nothing in browser.rs is
+# platform-specific either, so the cross-check loses no Windows coverage.
+remote-browser = ["dep:chromiumoxide"]
 
 [dependencies]
 omnireach-protocol = { path = "../protocol" }
@@ -35,6 +39,11 @@ portable-pty = "0.9.0"
 # `decode` compiles fine and panics at runtime. `rust_crypto` is pure Rust.
 jsonwebtoken = { version = "10.4", default-features = false, features = ["rust_crypto"], optional = true }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
+# No `fetcher` feature: that is the only thing that pulls a TLS stack (and the
+# C it builds). Without it chromiumoxide talks to an already-installed Chrome
+# over plain ws://localhost, so this stays cross-checkable for Windows.
+chromiumoxide = { version = "0.9", optional = true }
+base64 = "0.22"
 futures-util = "0.3"
 toml = "0.8"
 dirs = "5"

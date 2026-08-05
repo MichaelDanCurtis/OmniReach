@@ -18,8 +18,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "cargo build",
-    "testCommand": "cd \"/Volumes/Main External/Development/OmniReach\" && cargo test --all 2>&1 | grep -E \"^test result|^error|panicked\" | head -10 && cargo clippy --all-targets -- -D warnings 2>&1 | grep -E \"^error|^warning\" | head -5; cargo check -p omnireach-host --no-default-features --target x86_64-pc-windows-msvc 2>&1 | tail -1",
+    "buildCommand": "cd \"/Volumes/Main External/Development/OmniReach/client\" && npx tsc --noEmit 2>&1 | head -15; echo \"---\"; cd .. && wc -l crates/host/src/fs.rs crates/host/src/browser.rs 2>/dev/null",
+    "testCommand": "cd \"/Volumes/Main External/Development/OmniReach\" && cargo test -p omnireach-host --test fs 2>&1 | tail -30",
     "lintCommand": "cargo clippy",
     "devCommand": "cargo run",
     "scripts": {}
@@ -113,9 +113,33 @@
       "type": "file"
     },
     {
+      "path": "client/src/connection.ts",
+      "accessCount": 6,
+      "lastAccessed": 1785944746215,
+      "type": "file"
+    },
+    {
+      "path": "crates/host/Cargo.toml",
+      "accessCount": 5,
+      "lastAccessed": 1785944557156,
+      "type": "file"
+    },
+    {
       "path": "crates/host/src/transport.rs",
       "accessCount": 3,
       "lastAccessed": 1785944018853,
+      "type": "file"
+    },
+    {
+      "path": "client/src/style.css",
+      "accessCount": 3,
+      "lastAccessed": 1785944984878,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 3,
+      "lastAccessed": 1785945094873,
       "type": "file"
     },
     {
@@ -125,21 +149,69 @@
       "type": "file"
     },
     {
-      "path": "client/index.html",
-      "accessCount": 1,
-      "lastAccessed": 1785944103413,
-      "type": "file"
-    },
-    {
-      "path": "client/src/style.css",
-      "accessCount": 1,
-      "lastAccessed": 1785944112864,
+      "path": "crates/protocol/src/frame.rs",
+      "accessCount": 2,
+      "lastAccessed": 1785944527846,
       "type": "file"
     },
     {
       "path": "client/src/main.ts",
+      "accessCount": 2,
+      "lastAccessed": 1785944942171,
+      "type": "file"
+    },
+    {
+      "path": "client/index.html",
+      "accessCount": 2,
+      "lastAccessed": 1785944948951,
+      "type": "file"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-22-omnireach-terminal-core-design.md",
       "accessCount": 1,
-      "lastAccessed": 1785944156963,
+      "lastAccessed": 1785944639003,
+      "type": "file"
+    },
+    {
+      "path": "crates/host/src/lib.rs",
+      "accessCount": 1,
+      "lastAccessed": 1785944644813,
+      "type": "file"
+    },
+    {
+      "path": "crates/host/src/sessions.rs",
+      "accessCount": 1,
+      "lastAccessed": 1785944651315,
+      "type": "file"
+    },
+    {
+      "path": "crates/host/tests/replay.rs",
+      "accessCount": 1,
+      "lastAccessed": 1785944675150,
+      "type": "file"
+    },
+    {
+      "path": "client/src/terminals.ts",
+      "accessCount": 1,
+      "lastAccessed": 1785944784188,
+      "type": "file"
+    },
+    {
+      "path": "client/src/files.ts",
+      "accessCount": 1,
+      "lastAccessed": 1785944840909,
+      "type": "file"
+    },
+    {
+      "path": "client/src/browser.ts",
+      "accessCount": 1,
+      "lastAccessed": 1785944918550,
+      "type": "file"
+    },
+    {
+      "path": "crates/host/tests/fs.rs",
+      "accessCount": 1,
+      "lastAccessed": 1785944994809,
       "type": "file"
     }
   ],

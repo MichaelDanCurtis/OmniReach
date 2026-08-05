@@ -95,10 +95,24 @@ Built and verified:
   produced `.exe` are unproven. Specifically unknown: whether dropping the
   slave produces EOF on a ConPTY master, and whether `kill()` unblocks a
   ConPTY read. Both are load-bearing.
-- **No Cloudflare tunnel setup exists.** JWT validation works; nothing
-  configures `cloudflared`, creates the named tunnel, or implements the
-  client's SSO login. That flow's endpoint shape must be checked against live
-  Cloudflare docs rather than trusted from the spec.
+- **No Cloudflare tunnel setup exists, and the client cannot authenticate
+  through Access as currently built.** Two separate facts:
+
+  1. Host-side validation is *correct* — checked against live Cloudflare docs
+     on 2026-08-05: the origin receives the token in the
+     `Cf-Access-Jwt-Assertion` header, and the JWKS lives at
+     `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`. Both match
+     what `auth.rs` implements.
+  2. But the client opens its WebSocket from the **webview**, and the browser
+     WebSocket API cannot set request headers — so it cannot present that
+     header at all. The design called for a Rust core owning the WS connection
+     precisely to avoid this; the implementation drifted. Fixing it means
+     moving the socket into `src-tauri` and bridging frames to the webview.
+     The common workaround — passing the JWT as a URL query parameter — is
+     rejected here: it leaks a credential into proxy and server logs.
+
+  Until that is done, the host must stay bound to localhost or a trusted LAN.
+  Nothing configures `cloudflared` or creates the named tunnel either.
 - **The client's Enter-key path is untested.** Multi-terminal routing, resume,
   close/switch, and exit reporting were all verified headlessly through the
   app's real send path (`conn.sendInput`), and the host is confirmed to

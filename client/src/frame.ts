@@ -5,7 +5,10 @@ export const HEADER_LEN = 13;
 export const FrameKind = {
   PtyOutput: 0x01,
   PtyInput: 0x02,
+  /** File bytes; handle = transfer id, seq = byte offset within the file. */
   FsChunk: 0x03,
+  /** Screencast JPEG; handle = tab handle, seq = frame counter. */
+  BrowserFrame: 0x04,
 } as const;
 
 export interface Frame {

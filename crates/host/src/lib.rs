@@ -1,6 +1,9 @@
 #[cfg(feature = "access-auth")]
 pub mod auth;
+#[cfg(feature = "remote-browser")]
+pub mod browser;
 pub mod config;
+pub mod fs;
 pub mod pty;
 pub mod ring;
 pub mod sessions;

@@ -10,12 +10,17 @@
   <body>
     <header class="bar">
       <span class="brand">OmniReach</span>
-      <nav id="tabs" class="tabs" aria-label="Terminals"></nav>
-      <button id="new-pane" class="ctl" title="New terminal">+</button>
-      <button id="close-pane" class="ctl" title="Close active terminal">×</button>
+      <nav id="nav" class="nav" aria-label="Views"></nav>
+      <nav id="term-tabs" class="tabs" aria-label="Terminals"></nav>
+      <span id="term-ctls" class="term-ctls">
+        <button id="new-pane" class="ctl" title="New terminal">+</button>
+        <button id="close-pane" class="ctl" title="Close active terminal">
+          ×
+        </button>
+      </span>
       <span id="status" class="status disconnected">disconnected</span>
     </header>
-    <div id="terminals"></div>
+    <div id="views" class="views"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

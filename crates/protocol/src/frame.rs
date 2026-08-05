@@ -7,7 +7,14 @@ pub const HEADER_LEN: usize = 13;
 pub enum FrameKind {
     PtyOutput = 0x01,
     PtyInput = 0x02,
+    /// File bytes, up or down. `handle` is the transfer id, `seq` the byte
+    /// offset within the file — so a resumed upload is just a new frame at the
+    /// offset the host already has.
     FsChunk = 0x03,
+    /// A screencast JPEG. `handle` is the tab id, `seq` the frame counter.
+    /// Binary rather than base64-in-JSON for the same reason as PTY output:
+    /// base64 would add ~33% to the heaviest stream in the system.
+    BrowserFrame = 0x04,
 }
 
 impl FrameKind {
@@ -16,6 +23,7 @@ impl FrameKind {
             0x01 => Some(Self::PtyOutput),
             0x02 => Some(Self::PtyInput),
             0x03 => Some(Self::FsChunk),
+            0x04 => Some(Self::BrowserFrame),
             _ => None,
         }
     }
