@@ -509,7 +509,7 @@ impl Pump {
                     Err(RecvError::Closed) => {
                         let _ = self.send_event(ControlEvent::PtyExit {
                             session_id: self.session.id(),
-                            status: 0,
+                            status: self.session.exit_status().unwrap_or(0),
                         }).await;
                         return;
                     }
@@ -532,11 +532,13 @@ impl Pump {
                         let flushed =
                             !self.throttled && self.next_seq >= self.session.head_seq();
                         if dead_ticks >= DEAD_TICKS_BEFORE_EXIT && flushed {
-                            // `PtySession` exposes no wait status, so this is
-                            // "the shell is gone", not "the shell succeeded".
+                            // The reaper stores the status before flipping
+                            // `alive`, and DEAD_TICKS_BEFORE_EXIT adds ~300ms
+                            // on top, so by here the status is present. The
+                            // unwrap_or(0) covers only the theoretical race.
                             let _ = self.send_event(ControlEvent::PtyExit {
                                 session_id: self.session.id(),
-                                status: 0,
+                                status: self.session.exit_status().unwrap_or(0),
                             }).await;
                             return;
                         }

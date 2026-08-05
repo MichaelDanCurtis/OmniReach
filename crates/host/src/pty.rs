@@ -45,6 +45,10 @@ pub struct PtySession {
     writer: Mutex<Box<dyn Write + Send>>,
     killer: Mutex<Box<dyn portable_pty::ChildKiller + Send + Sync>>,
     alive: AtomicBool,
+    /// The child's real exit code, captured by the reaper task. `None` while
+    /// the child lives. Written before the `alive` flip so an observer that
+    /// sees the session dead can already read the status.
+    exit_status: Mutex<Option<i32>>,
     size: Mutex<(u16, u16)>,
 }
 
@@ -98,6 +102,7 @@ impl PtySession {
             writer: Mutex::new(writer),
             killer: Mutex::new(killer),
             alive: AtomicBool::new(true),
+            exit_status: Mutex::new(None),
             size: Mutex::new((spec.cols, spec.rows)),
         });
 
@@ -129,7 +134,11 @@ impl PtySession {
         {
             let session = Arc::clone(&session);
             tokio::task::spawn_blocking(move || {
-                let _ = child.wait();
+                if let Ok(status) = child.wait() {
+                    // Store BEFORE flipping `alive`: consumers key off the
+                    // alive flag, and must never observe dead-with-no-status.
+                    *session.exit_status.lock() = Some(status.exit_code() as i32);
+                }
                 session.alive.store(false, Ordering::SeqCst);
             });
         }
@@ -151,6 +160,12 @@ impl PtySession {
 
     pub fn is_alive(&self) -> bool {
         self.alive.load(Ordering::SeqCst)
+    }
+
+    /// The child's exit code once it has been reaped; `None` while it lives
+    /// (or in the narrow window between EOF and the reaper's `wait` landing).
+    pub fn exit_status(&self) -> Option<i32> {
+        *self.exit_status.lock()
     }
 
     pub fn head_seq(&self) -> u64 {
@@ -298,6 +313,53 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
         assert!(dead, "session should report dead after kill()");
+    }
+
+    #[tokio::test]
+    async fn reports_the_child_exit_status() {
+        let spec = PtySpec {
+            shell: "/bin/sh".into(),
+            args: vec!["-c".into(), "exit 7".into()],
+            cwd: None,
+            cols: 80,
+            rows: 24,
+        };
+        let s = PtySession::spawn(&spec, 4096).unwrap();
+        for _ in 0..100 {
+            if !s.is_alive() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(!s.is_alive());
+        assert_eq!(
+            s.exit_status(),
+            Some(7),
+            "exit status must be the child's real code, not a placeholder"
+        );
+    }
+
+    #[tokio::test]
+    async fn exit_status_is_none_while_the_child_lives() {
+        let spec = PtySpec {
+            shell: "/bin/sh".into(),
+            args: vec!["-c".into(), "sleep 30".into()],
+            cwd: None,
+            cols: 80,
+            rows: 24,
+        };
+        let s = PtySession::spawn(&spec, 4096).unwrap();
+        assert_eq!(s.exit_status(), None);
+
+        // See `accepts_input_and_echoes_it_back` for why the kill is mandatory.
+        s.kill().unwrap();
+        for _ in 0..100 {
+            if !s.is_alive() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(!s.is_alive());
     }
 
     #[tokio::test]

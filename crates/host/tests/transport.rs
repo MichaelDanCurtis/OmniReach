@@ -43,6 +43,13 @@ name = "printer"
 command = "/bin/sh"
 args = ["-c", "printf 'marker-alpha\\n'"]
 
+# Exits nonzero so the pty.exit assertion can tell a real wait status from the
+# old hardcoded 0 — asserting on an exit-0 shell would pass against the bug.
+[[shells]]
+name = "failer"
+command = "/bin/sh"
+args = ["-c", "exit 7"]
+
 # ~17 MiB as fast as the pty will take it, then exits. Enough to blow past the
 # 4 MiB outbound high-water mark while the test deliberately refuses to read.
 [[shells]]
@@ -503,7 +510,7 @@ async fn client_is_told_when_the_shell_exits() {
         &mut ws,
         1,
         "pty.create",
-        serde_json::json!({"shell": "printer", "cols": 80, "rows": 24}),
+        serde_json::json!({"shell": "failer", "cols": 80, "rows": 24}),
     )
     .await;
     let session_id = expect_ok(&resp)["session_id"].as_str().unwrap().to_string();
@@ -519,6 +526,11 @@ async fn client_is_told_when_the_shell_exits() {
             let v: serde_json::Value = serde_json::from_str(&t).unwrap();
             if v["event"] == "pty.exit" {
                 assert_eq!(v["session_id"], session_id);
+                assert_eq!(
+                    v["status"], 7,
+                    "pty.exit must carry the child's real wait status; \
+                     0 here means the old placeholder survived"
+                );
                 saw_exit = true;
             }
         }
