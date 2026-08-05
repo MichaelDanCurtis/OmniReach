@@ -42,6 +42,11 @@ export class Connection {
 
   constructor(private url: string) {}
 
+  /** Point at a different host. Only meaningful before `connect()`. */
+  setUrl(url: string): void {
+    this.url = url;
+  }
+
   onOutput(cb: OutputCb) {
     this.outputCb = cb;
   }

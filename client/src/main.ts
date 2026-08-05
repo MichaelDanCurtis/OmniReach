@@ -4,9 +4,26 @@ import { TerminalsView } from "./terminals";
 import { FilesView } from "./files";
 import { BrowserView } from "./browser";
 
-const HOST_URL =
-  (import.meta.env.VITE_HOST_URL as string | undefined) ??
-  "ws://127.0.0.1:7717/ws";
+/**
+ * Where to connect.
+ *
+ * Inside the Tauri app the Rust core runs a loopback proxy that attaches
+ * Cloudflare Access credentials — the webview's WebSocket API cannot set
+ * request headers, so it cannot authenticate on its own. In a plain browser
+ * (dev server) there is no proxy, so connect directly.
+ */
+async function resolveHostUrl(): Promise<string> {
+  const override = import.meta.env.VITE_HOST_URL as string | undefined;
+  if (override) return override;
+
+  const tauri = (window as any).__TAURI__;
+  if (tauri?.core?.invoke) {
+    // Let a failure surface: a proxy that did not bind means credentials
+    // would be silently dropped, which fails later and less clearly.
+    return await tauri.core.invoke("ws_url");
+  }
+  return "ws://127.0.0.1:7717/ws";
+}
 
 type ViewName = "terminals" | "files" | "browser";
 const VIEW_KEY = "omnireach.view";
@@ -17,7 +34,9 @@ const termTabsEl = document.getElementById("term-tabs") as HTMLElement;
 const termCtlsEl = document.getElementById("term-ctls") as HTMLElement;
 const viewsEl = document.getElementById("views") as HTMLDivElement;
 
-const conn = new Connection(HOST_URL);
+// Placeholder until `resolveHostUrl` answers; `connect()` is not called until
+// then, so the value is never used to dial.
+const conn = new Connection("ws://127.0.0.1:7717/ws");
 
 // Each view owns its own root element; switching toggles `.visible`.
 const termRoot = document.createElement("div");
@@ -97,7 +116,21 @@ window.addEventListener("resize", () => {
 
 renderNav();
 setStatus("disconnected");
-conn.connect();
+
+resolveHostUrl()
+  .then((url) => {
+    conn.setUrl(url);
+    conn.connect();
+  })
+  .catch((e) => {
+    setStatus("disconnected");
+    statusEl.title = String(e);
+    // Visible, not silent: without a URL there is nothing to retry against.
+    const banner = document.createElement("div");
+    banner.className = "fatal";
+    banner.textContent = `Cannot determine host: ${e}`;
+    document.body.prepend(banner);
+  });
 
 // Dev-only hook so headless verification can drive the app's REAL code paths
 // rather than reimplementing them. Not defined in production builds.

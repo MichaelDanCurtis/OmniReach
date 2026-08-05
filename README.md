@@ -77,7 +77,29 @@ name    = "pwsh"
 command = "powershell.exe"
 args    = ["-NoLogo"]
 default = true
+
+# Optional, for the remote browser:
+# chrome_path   = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+# downloads_dir = "C:\\Users\\me\\Downloads\\omnireach"
 ```
+
+### Client
+
+`~/Library/Application Support/OmniReach/client.json` on macOS. Absent, the
+client connects to a local host with no authentication.
+
+```json
+{
+  "url": "wss://omnireach.example.com/ws",
+  "access_client_id": "<service token id>",
+  "access_client_secret": "<service token secret>"
+}
+```
+
+Or set `OMNIREACH_HOST_URL`, `OMNIREACH_ACCESS_CLIENT_ID`,
+`OMNIREACH_ACCESS_CLIENT_SECRET`, `OMNIREACH_ACCESS_JWT` in the environment —
+they override the file. Use `access_jwt` instead of the token pair if you
+obtain a JWT interactively via `cloudflared access login`.
 
 ## State of the work
 
@@ -114,24 +136,23 @@ Built and verified:
   produced `.exe` are unproven. Specifically unknown: whether dropping the
   slave produces EOF on a ConPTY master, and whether `kill()` unblocks a
   ConPTY read. Both are load-bearing.
-- **No Cloudflare tunnel setup exists, and the client cannot authenticate
-  through Access as currently built.** Two separate facts:
+- **No Cloudflare tunnel setup exists**, and the Access path has never run
+  against a real tunnel. What *is* settled:
 
-  1. Host-side validation is *correct* — checked against live Cloudflare docs
-     on 2026-08-05: the origin receives the token in the
-     `Cf-Access-Jwt-Assertion` header, and the JWKS lives at
-     `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`. Both match
-     what `auth.rs` implements.
-  2. But the client opens its WebSocket from the **webview**, and the browser
-     WebSocket API cannot set request headers — so it cannot present that
-     header at all. The design called for a Rust core owning the WS connection
-     precisely to avoid this; the implementation drifted. Fixing it means
-     moving the socket into `src-tauri` and bridging frames to the webview.
-     The common workaround — passing the JWT as a URL query parameter — is
-     rejected here: it leaks a credential into proxy and server logs.
+  - Host-side validation is correct — checked against live Cloudflare docs on
+    2026-08-05: the origin receives the token in the `Cf-Access-Jwt-Assertion`
+    header, and the JWKS lives at
+    `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`. Both match
+    what `auth.rs` implements.
+  - The client can now present credentials. The webview's WebSocket API cannot
+    set request headers, so the Tauri core runs a loopback proxy that attaches
+    them on the outbound leg (`client/src-tauri/src/proxy.rs`). Verified by
+    test: bytes pass through verbatim and the upstream really receives the
+    header. Passing the token as a URL query parameter was rejected — it
+    would leak a credential into proxy and server logs.
 
-  Until that is done, the host must stay bound to localhost or a trusted LAN.
-  Nothing configures `cloudflared` or creates the named tunnel either.
+  What remains unverified is the end-to-end path through a real Cloudflare
+  tunnel with a real Access policy. Nothing here creates that tunnel.
 - **The client's Enter-key path is untested.** Multi-terminal routing, resume,
   close/switch, and exit reporting were all verified headlessly through the
   app's real send path (`conn.sendInput`), and the host is confirmed to

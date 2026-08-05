@@ -19,7 +19,7 @@
   },
   "build": {
     "buildCommand": "cd \"/Volumes/Main External/Development/OmniReach/client\" && npx tsc --noEmit 2>&1 | head -15; echo \"---\"; cd .. && wc -l crates/host/src/fs.rs crates/host/src/browser.rs 2>/dev/null",
-    "testCommand": "cd \"/Volumes/Main External/Development/OmniReach\" && echo \"leaked before: $(pgrep -f 'user-data-dir=.*omnireach[-]chrome' | wc -l | tr -d ' ')\" && echo \"=== INTEGRATION ===\" && cargo test -p omnireach-host --test browser -- --test-threads=1 2>&1 | tail -8 && echo \"=== LIB UNIT (jpeg parser) ===\" && cargo test -p omnireach-host --lib browser 2>&1 | tail -10",
+    "testCommand": "cd \"/Volumes/Main External/Development/OmniReach\"\necho \"=== full run x2 (stability + leak check) ===\"\nfor i in 1 2; do cargo test -p omnireach-host --test browser -- --test-threads=1 2>&1 | grep \"test result\"; done\nsleep 3\necho \"=== leaked headless chromes: $(pgrep -f 'user-data-dir=.*omnireach[-]chrome' | wc -l | tr -d ' ') ===\"\necho \"=== pgrep -fl \\\"Google Chrome\\\" | head ===\"; pgrep -fl \"Google Chrome\" | head -3 | cut -c1-70\necho \"=== of those, headless=new: $(pgrep -fl 'Google Chrome' | grep -c 'headless=new' || true) ===\"\necho \"=== leftover profile dirs: $(find \"$TMPDIR\" -maxdepth 1 -name 'omnireach-chrome-*' | wc -l | tr -d ' ') ===\"\necho \"=== leftover download dirs: $(find \"$TMPDIR\" -maxdepth 1 -name 'omnireach-test-downloads-*' | wc -l | tr -d ' ') ===\"\necho \"=== lib unit tests ===\"; cargo test -p omnireach-host --lib browser 2>&1 | grep \"test result\"",
     "lintCommand": "cargo clippy",
     "devCommand": "cargo run",
     "scripts": {}
@@ -113,15 +113,15 @@
       "type": "file"
     },
     {
-      "path": "README.md",
-      "accessCount": 7,
-      "lastAccessed": 1785945890447,
+      "path": "crates/host/tests/browser.rs",
+      "accessCount": 8,
+      "lastAccessed": 1785946056333,
       "type": "file"
     },
     {
-      "path": "crates/host/tests/browser.rs",
+      "path": "README.md",
       "accessCount": 7,
-      "lastAccessed": 1785946029594,
+      "lastAccessed": 1785945890447,
       "type": "file"
     },
     {

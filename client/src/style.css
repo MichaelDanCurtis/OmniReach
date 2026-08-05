@@ -34,6 +34,14 @@ body {
   display: none !important;
 }
 
+.fatal {
+  background: #3a1717;
+  color: #e88b8b;
+  border-bottom: 1px solid var(--bad);
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
 /* ------------------------------------------------------------------ bar */
 
 .bar {

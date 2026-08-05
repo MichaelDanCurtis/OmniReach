@@ -213,13 +213,62 @@ async fn tabs_navigation_evaluation_and_console() {
             .await
             .unwrap_err();
         assert_eq!(err.code(), "NO_SUCH_TAB");
+
+        // --- downloads land where the file browser can see them -----------
+        // Headless Chrome DENIES downloads by default, silently: the click
+        // succeeds, no error is raised anywhere, and the file simply never
+        // appears. So `Browser.setDownloadBehavior` is not optional plumbing,
+        // and the only way to know it took effect is to look on disk.
+        svc.evaluate(
+            &first.tab_id,
+            "const a = document.createElement('a'); \
+             a.href = URL.createObjectURL(new Blob(['omnireach-download-payload'], \
+             {type: 'text/plain'})); \
+             a.download = 'omnireach-test.txt'; \
+             document.body.appendChild(a); a.click(); null",
+        )
+        .await
+        .expect("trigger a download");
+
+        let mut landed = None;
+        let deadline = Instant::now() + Duration::from_secs(15);
+        while Instant::now() < deadline {
+            // Skip Chrome's in-progress `.crdownload` placeholder.
+            let done = std::fs::read_dir(&downloads)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(|e| e.path())
+                .find(|p| p.extension().is_some_and(|x| x != "crdownload"));
+            if let Some(p) = done {
+                if let Ok(body) = std::fs::read_to_string(&p) {
+                    landed = Some((p, body));
+                    break;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+
+        let (path, body) = landed.unwrap_or_else(|| {
+            panic!(
+                "nothing was downloaded into {}; Browser.setDownloadBehavior did not \
+                 take effect, so the file browser would never see remote downloads",
+                downloads.display()
+            )
+        });
+        assert_eq!(
+            path.file_name().unwrap(),
+            "omnireach-test.txt",
+            "the download kept its filename"
+        );
+        assert_eq!(body, "omnireach-download-payload", "download was truncated");
     })
     .await;
 }
 
 #[tokio::test]
 async fn screencast_streams_frames_and_clicks_land_on_target() {
-    drive(|svc, downloads| async move {
+    drive(|svc, _downloads| async move {
         let tab = svc
             .new_tab(Some(CAST_PAGE.to_string()))
             .await
