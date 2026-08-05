@@ -18,7 +18,7 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "cd \"/Volumes/Main External/Development/OmniReach/client\" && npx tsc --noEmit 2>&1 | head -15; echo \"---\"; cd .. && wc -l crates/host/src/fs.rs crates/host/src/browser.rs 2>/dev/null",
+    "buildCommand": "cd \"/Volumes/Main External/Development/OmniReach\" && cargo build -p omnireach-host --quiet 2>&1 | grep -E \"^error\" -A5 | head -15; echo \"BUILD_OK\"; cargo check -p omnireach-host --no-default-features --features remote-browser --target x86_64-pc-windows-msvc 2>&1 | tail -2",
     "testCommand": "cd \"/Volumes/Main External/Development/OmniReach\"\necho \"=== full run x2 (stability + leak check) ===\"\nfor i in 1 2; do cargo test -p omnireach-host --test browser -- --test-threads=1 2>&1 | grep \"test result\"; done\nsleep 3\necho \"=== leaked headless chromes: $(pgrep -f 'user-data-dir=.*omnireach[-]chrome' | wc -l | tr -d ' ') ===\"\necho \"=== pgrep -fl \\\"Google Chrome\\\" | head ===\"; pgrep -fl \"Google Chrome\" | head -3 | cut -c1-70\necho \"=== of those, headless=new: $(pgrep -fl 'Google Chrome' | grep -c 'headless=new' || true) ===\"\necho \"=== leftover profile dirs: $(find \"$TMPDIR\" -maxdepth 1 -name 'omnireach-chrome-*' | wc -l | tr -d ' ') ===\"\necho \"=== leftover download dirs: $(find \"$TMPDIR\" -maxdepth 1 -name 'omnireach-test-downloads-*' | wc -l | tr -d ' ') ===\"\necho \"=== lib unit tests ===\"; cargo test -p omnireach-host --lib browser 2>&1 | grep \"test result\"",
     "lintCommand": "cargo clippy",
     "devCommand": "cargo run",
@@ -200,6 +200,12 @@
       "path": "client/src-tauri/tauri.conf.json",
       "accessCount": 2,
       "lastAccessed": 1785945920111,
+      "type": "file"
+    },
+    {
+      "path": "crates/host/src/main.rs",
+      "accessCount": 2,
+      "lastAccessed": 1785946431121,
       "type": "file"
     },
     {
