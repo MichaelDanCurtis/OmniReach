@@ -91,6 +91,12 @@ const LAUNCH_TIMEOUT: Duration = Duration::from_secs(20);
 /// hang here would be indistinguishable from an idle browser.
 const OP_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// How long a polite `Browser.close` gets before shutdown stops asking and
+/// kills. Much shorter than [`OP_TIMEOUT`] on purpose: a Chrome that will not
+/// close is exactly the case trap 3 is about, and blocking host shutdown for
+/// half a minute to be courteous to it is the wrong trade.
+const CLOSE_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// Frames are large; a subscriber this far behind is not going to catch up, and
 /// buffering more of them is just a slower way to run out of memory.
 const FRAME_CAPACITY: usize = 64;
@@ -614,7 +620,7 @@ impl BrowserService {
         if let Some(mut browser) = self.browser.lock().await.take() {
             // Ask nicely, then insist. Either way `wait` is what actually reaps
             // the process; skipping it is how zombies accumulate.
-            if tokio::time::timeout(OP_TIMEOUT, browser.close())
+            if tokio::time::timeout(CLOSE_TIMEOUT, browser.close())
                 .await
                 .is_err()
             {

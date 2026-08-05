@@ -1,6 +1,11 @@
 [workspace]
 resolver = "2"
 members = ["crates/protocol", "crates/host"]
+# The Tauri app lives inside this directory tree but is built by the Tauri CLI
+# with its own lockfile and profile. Without this exclusion cargo refuses to
+# build it at all ("file found to be present in multiple build targets"), and
+# the desktop app cannot be produced.
+exclude = ["client/src-tauri"]
 
 [workspace.package]
 edition = "2021"

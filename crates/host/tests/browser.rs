@@ -37,6 +37,7 @@ use futures_util::FutureExt;
 use omnireach_host::browser::{BrowserError, BrowserService};
 use std::future::Future;
 use std::panic::AssertUnwindSafe;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::{timeout, Instant};
@@ -72,7 +73,7 @@ fn chrome_is_installed() -> bool {
 /// escapes. See the module docs.
 async fn drive<F, Fut>(body: F)
 where
-    F: FnOnce(Arc<BrowserService>) -> Fut,
+    F: FnOnce(Arc<BrowserService>, PathBuf) -> Fut,
     Fut: Future<Output = ()>,
 {
     let downloads =
@@ -92,7 +93,7 @@ where
         }
     };
 
-    let outcome = AssertUnwindSafe(body(Arc::clone(&service)))
+    let outcome = AssertUnwindSafe(body(Arc::clone(&service), downloads.clone()))
         .catch_unwind()
         .await;
 
@@ -106,7 +107,7 @@ where
 
 #[tokio::test]
 async fn tabs_navigation_evaluation_and_console() {
-    drive(|svc| async move {
+    drive(|svc, downloads| async move {
         // --- new_tab + list_tabs ---------------------------------------
         let first = svc.new_tab(None).await.expect("open first tab");
         assert!(first.active, "a freshly opened tab is the active one");
@@ -218,7 +219,7 @@ async fn tabs_navigation_evaluation_and_console() {
 
 #[tokio::test]
 async fn screencast_streams_frames_and_clicks_land_on_target() {
-    drive(|svc| async move {
+    drive(|svc, downloads| async move {
         let tab = svc
             .new_tab(Some(CAST_PAGE.to_string()))
             .await

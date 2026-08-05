@@ -15,10 +15,24 @@ reconnect an hour later from somewhere else.
 
 ```
 crates/protocol/   wire format — binary frame codec + JSON control types
-crates/host/       the host: ring, PTY sessions, registry, auth, transport
-client/            Tauri v2 + xterm.js macOS client
+crates/host/       ring, PTY sessions, registry, filesystem, browser,
+                   auth, transport
+client/            Tauri v2 client — terminals, file browser, remote browser
 scripts/check.sh   fmt + clippy + tests + Windows type-check
 ```
+
+## What it does
+
+Three views, one multiplexed WebSocket:
+
+- **Terminals** — persistent PTY sessions. Four spawn on first launch; open
+  and close more freely. Close the laptop mid-run and reconnect later: the
+  session is still running and its scrollback is replayed.
+- **Files** — browse the host filesystem, upload and download with 1 MB
+  chunking and resume-by-offset.
+- **Browser** — a headless Chrome running on the host, streamed as JPEG
+  frames, with real mouse and keyboard input, tabs, a JavaScript console,
+  and downloads routed where the file browser can see them.
 
 ## Running it locally
 
@@ -67,8 +81,7 @@ default = true
 
 ## State of the work
 
-Milestones M1–M4 of the plan, less the Cloudflare tunnel setup. **57 tests
-passing.**
+Milestones M1–M7 less the Cloudflare tunnel setup. **~120 tests passing.**
 
 Built and verified:
 
@@ -79,6 +92,12 @@ Built and verified:
 - Multiplexed WebSocket transport with real backpressure
 - Cloudflare Access JWT validation (JWKS cached, refreshed on unknown `kid`)
 - `pty.exit` carries the child's real wait status, not a placeholder
+- Whole-filesystem browse and transfer, byte-transparent and resumable.
+  `remove` is deliberately non-recursive: deleting a tree by accident from a
+  browse UI is unrecoverable.
+- A remote headless Chrome: tabs, navigation, JPEG screencast, mouse and
+  keyboard input, a JS console, and downloads. Click mapping is verified
+  against a negative control — a click aimed away from the target must miss.
 - A Tauri + xterm.js client with dynamic terminals: 4 spawn on first launch,
   tabs to switch, [+]/[×] to open and close. Sessions resume across app
   restarts by replaying the host's ring from 0, so scrollback is repainted
@@ -122,8 +141,8 @@ Built and verified:
 
 ### Not built
 
-File browser (M5) and the remote headless-Chrome session (M6/M7). Each needs
-its own spec; the protocol reserves frame-kind space for both.
+Nothing from the original scope remains unbuilt. The outstanding work is the
+Cloudflare tunnel setup and the client-auth transport gap described above.
 
 ## Traps worth knowing before editing
 

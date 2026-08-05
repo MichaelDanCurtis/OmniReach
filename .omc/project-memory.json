@@ -19,7 +19,7 @@
   },
   "build": {
     "buildCommand": "cd \"/Volumes/Main External/Development/OmniReach/client\" && npx tsc --noEmit 2>&1 | head -15; echo \"---\"; cd .. && wc -l crates/host/src/fs.rs crates/host/src/browser.rs 2>/dev/null",
-    "testCommand": "cd \"/Volumes/Main External/Development/OmniReach\" && echo \"=== headless/omnireach chromes ===\"; pgrep -fl \"Google Chrome\" | grep -c \"headless\\|omnireach-chrome\" || echo \"0 (none)\"; echo \"=== profile dirs before ===\"; ls -ld ${TMPDIR}omnireach-chrome-* 2>/dev/null; echo \"=== run tests again ===\"; cargo test -p omnireach-host --test browser -- --test-threads=1 2>&1 | tail -5; echo \"=== headless chromes after ===\"; pgrep -fl \"Google Chrome\" | grep \"headless\\|omnireach-chrome\" | head -3; echo \"(grep exit $?)\"; echo \"=== profile dirs after ===\"; ls -ld ${TMPDIR}omnireach-chrome-* 2>/dev/null",
+    "testCommand": "cd \"/Volumes/Main External/Development/OmniReach\" && echo \"leaked before: $(pgrep -f 'user-data-dir=.*omnireach[-]chrome' | wc -l | tr -d ' ')\" && echo \"=== INTEGRATION ===\" && cargo test -p omnireach-host --test browser -- --test-threads=1 2>&1 | tail -8 && echo \"=== LIB UNIT (jpeg parser) ===\" && cargo test -p omnireach-host --lib browser 2>&1 | tail -10",
     "lintCommand": "cargo clippy",
     "devCommand": "cargo run",
     "scripts": {}
@@ -113,6 +113,18 @@
       "type": "file"
     },
     {
+      "path": "README.md",
+      "accessCount": 7,
+      "lastAccessed": 1785945890447,
+      "type": "file"
+    },
+    {
+      "path": "crates/host/tests/browser.rs",
+      "accessCount": 7,
+      "lastAccessed": 1785946029594,
+      "type": "file"
+    },
+    {
       "path": "crates/host/src/pty.rs",
       "accessCount": 6,
       "lastAccessed": 1785943996174,
@@ -137,21 +149,15 @@
       "type": "file"
     },
     {
-      "path": "crates/host/tests/browser.rs",
+      "path": "crates/host/src/browser.rs",
       "accessCount": 5,
-      "lastAccessed": 1785945733251,
+      "lastAccessed": 1785945903384,
       "type": "file"
     },
     {
       "path": "client/src/style.css",
       "accessCount": 3,
       "lastAccessed": 1785944984878,
-      "type": "file"
-    },
-    {
-      "path": "README.md",
-      "accessCount": 3,
-      "lastAccessed": 1785945094873,
       "type": "file"
     },
     {
@@ -185,15 +191,15 @@
       "type": "file"
     },
     {
-      "path": "crates/host/src/browser.rs",
-      "accessCount": 2,
-      "lastAccessed": 1785945278180,
-      "type": "file"
-    },
-    {
       "path": "crates/host/src/config.rs",
       "accessCount": 2,
       "lastAccessed": 1785945477185,
+      "type": "file"
+    },
+    {
+      "path": "client/src-tauri/tauri.conf.json",
+      "accessCount": 2,
+      "lastAccessed": 1785945920111,
       "type": "file"
     },
     {
@@ -242,6 +248,12 @@
       "path": "crates/host/tests/transport_fs.rs",
       "accessCount": 1,
       "lastAccessed": 1785945339144,
+      "type": "file"
+    },
+    {
+      "path": "Cargo.toml",
+      "accessCount": 1,
+      "lastAccessed": 1785945843262,
       "type": "file"
     }
   ],
